@@ -7,6 +7,7 @@ import '../../components/medication/prescription_item.dart';
 import '../../components/common/loading_indicator.dart';
 import '../../components/common/empty_state.dart';
 import 'prescription_form.dart';
+import 'update_vitals_form.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final String patientId;
@@ -67,44 +68,22 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> with Single
     }
   }
 
-  Future<void> _updateVitals() async {
+  void _openUpdateVitalsForm() {
     if (_vitals == null) return;
-
-    // In a real app, you would show a form to update vitals
-    // For this example, we'll just update with some random values
-    final updatedVitals = _vitals!.copyWith(
-      heartRate: 75,
-      bloodPressure: '120/80',
-      height: 175.0,
-      weight: 70.0,
-      temperature: 36.5,
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UpdateVitalsForm(
+          patientId: widget.patientId,
+          currentVitals: _vitals!,
+          onVitalsUpdated: (updatedVitals) {
+            setState(() {
+              _vitals = updatedVitals;
+            });
+          },
+        ),
+      ),
     );
-
-    try {
-      await _databaseService.updatePatientVitals(widget.patientId, updatedVitals);
-      
-      setState(() {
-        _vitals = updatedVitals;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Vitals updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating vitals: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   @override
@@ -132,7 +111,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> with Single
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_tabController.index == 0) {
-            _updateVitals();
+            _openUpdateVitalsForm();
           } else {
             Navigator.of(context).push(
               MaterialPageRoute(

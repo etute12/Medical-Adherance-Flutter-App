@@ -5,9 +5,11 @@ import '../../services/database_service.dart';
 import '../../models/user_model.dart';
 import '../../components/common/loading_indicator.dart';
 import '../../components/common/empty_state.dart';
-import '../auth/login_screen.dart';
+import '../../components/navigation/app_drawer.dart';
 import 'patient_details.dart';
 import 'doctor_profile.dart';
+import '../../components/layout/responsive_container.dart';
+import 'medication_appeals_screen.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
@@ -18,17 +20,18 @@ class DoctorDashboard extends StatefulWidget {
 
 class _DoctorDashboardState extends State<DoctorDashboard> {
   final DatabaseService _databaseService = DatabaseService();
-  int _selectedIndex = 0;
+  String _currentRoute = 'patients';
   List<UserModel> _patients = [];
   bool _isLoading = true;
+  int _pendingAppealsCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadPatients();
+    _loadData();
   }
 
-  Future<void> _loadPatients() async {
+  Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
     });
@@ -36,13 +39,20 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final doctorId = authService.currentUser!.id;
+      
+      // Load patients
       final patients = await _databaseService.getDoctorPatients(doctorId);
+      
+      // Load pending appeals count
+      final appeals = await _databaseService.getPendingMedicationAppeals(doctorId);
       
       setState(() {
         _patients = patients;
+        _pendingAppealsCount = appeals.length;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading data: $e');
       setState(() {
         _isLoading = false;
       });
@@ -50,7 +60,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading patients: $e'),
+            content: Text('Error loading data: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -58,15 +68,18 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     }
   }
 
-  Future<void> _signOut() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    await authService.signOut();
-    
-    if (!mounted) return;
-    
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
+  void _changeRoute(String route) {
+    setState(() {
+      _currentRoute = route;
+    });
+  }
+
+  void _navigateToAppeals() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const MedicationAppealsScreen(),
+      ),
+    ).then((_) => _loadData());
   }
 
   @override
@@ -76,49 +89,50 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Doctor Dashboard'),
+        title: Text(_currentRoute == 'patients' ? 'Patients' : 'Profile'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
-          ),
+          if (_pendingAppealsCount > 0)
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications),
+                  onPressed: _navigateToAppeals,
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      _pendingAppealsCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
-      body: _selectedIndex == 0
+      drawer: AppDrawer(
+        currentRoute: _currentRoute,
+        onRouteChanged: _changeRoute,
+      ),
+      body: _currentRoute == 'patients'
           ? _buildPatientsTab()
           : DoctorProfile(doctor: doctor!),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Patients',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-      ),
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: () {
-                // TODO: Add patient functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Add patient functionality to be implemented'),
-                  ),
-                );
-              },
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
@@ -131,52 +145,42 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       return EmptyState(
         icon: Icons.people_outline,
         title: 'No patients yet',
-        message: 'Your patients will appear here',
-        action: ElevatedButton.icon(
-          onPressed: () {
-            // TODO: Add patient functionality
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Add patient functionality to be implemented'),
-              ),
-            );
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('Add Patient'),
-        ),
+        message: 'Patients who register with your doctor ID will appear here',
       );
     }
 
     return RefreshIndicator(
-      onRefresh: _loadPatients,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _patients.length,
-        itemBuilder: (context, index) {
-          final patient = _patients[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Text(
-                  patient.name.isNotEmpty ? patient.name[0].toUpperCase() : '?',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-              title: Text(patient.name),
-              subtitle: Text(patient.email),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => PatientDetailsScreen(patientId: patient.id),
+      onRefresh: _loadData,
+      child: ResponsiveContainer(
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          itemCount: _patients.length,
+          itemBuilder: (context, index) {
+            final patient = _patients[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  child: Text(
+                    patient.name.isNotEmpty ? patient.name[0].toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white),
                   ),
-                );
-              },
-            ),
-          );
-        },
+                ),
+                title: Text(patient.name),
+                subtitle: Text(patient.email),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PatientDetailsScreen(patientId: patient.id),
+                    ),
+                  ).then((_) => _loadData());
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

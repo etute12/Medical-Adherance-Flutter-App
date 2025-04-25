@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/database_service.dart';
-import '../auth/login_screen.dart';
+import '../../components/navigation/app_drawer.dart';
 import 'medication_list.dart';
 import 'calendar_view.dart';
 import 'patient_profile.dart';
@@ -15,75 +15,54 @@ class PatientDashboard extends StatefulWidget {
 }
 
 class _PatientDashboardState extends State<PatientDashboard> {
-  int _selectedIndex = 0;
-  final List<Widget> _pages = [];
+  String _currentRoute = 'medications';
   
-  @override
-  void initState() {
-    super.initState();
-    _initPages();
-  }
-  
-  void _initPages() {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final patient = authService.currentUser;
-    
-    if (patient != null) {
-      _pages.addAll([
-        const MedicationList(),
-        const CalendarView(),
-        PatientProfile(patient: patient),
-      ]);
-    }
-  }
-
-  Future<void> _signOut() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    await authService.signOut();
-    
-    if (!mounted) return;
-    
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final patient = authService.currentUser;
+    
+    Widget currentPage;
+    switch (_currentRoute) {
+      case 'medications':
+        currentPage = const MedicationList();
+        break;
+      case 'calendar':
+        currentPage = const CalendarView();
+        break;
+      case 'profile':
+        currentPage = PatientProfile(patient: patient!);
+        break;
+      default:
+        currentPage = const MedicationList();
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Patient Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
-          ),
-        ],
+        title: Text(_getTitle()),
       ),
-      body: _pages.isNotEmpty ? _pages[_selectedIndex] : const Center(child: CircularProgressIndicator()),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
+      drawer: AppDrawer(
+        currentRoute: _currentRoute,
+        onRouteChanged: (route) {
           setState(() {
-            _selectedIndex = index;
+            _currentRoute = route;
           });
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.medication),
-            label: 'Medications',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
       ),
+      body: currentPage,
     );
+  }
+
+  String _getTitle() {
+    switch (_currentRoute) {
+      case 'medications':
+        return 'My Medications';
+      case 'calendar':
+        return 'Calendar';
+      case 'profile':
+        return 'My Profile';
+      default:
+        return 'Patient Dashboard';
+    }
   }
 }

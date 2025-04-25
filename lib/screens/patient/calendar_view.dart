@@ -4,6 +4,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../../services/auth_service.dart';
 import '../../services/database_service.dart';
 import '../../models/prescription_model.dart';
+import '../../components/layout/responsive_container.dart';
 
 class CalendarView extends StatefulWidget {
   const CalendarView({super.key});
@@ -43,6 +44,7 @@ class _CalendarViewState extends State<CalendarView> {
       
       _generateEvents();
     } catch (e) {
+      print('Error loading prescriptions: $e');
       setState(() {
         _isLoading = false;
       });
@@ -114,36 +116,41 @@ class _CalendarViewState extends State<CalendarView> {
       );
     }
 
-    return Column(
-      children: [
-        TableCalendar(
-          firstDay: DateTime.now().subtract(const Duration(days: 365)),
-          lastDay: DateTime.now().add(const Duration(days: 365)),
-          focusedDay: _focusedDay,
-          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-          onDaySelected: (selectedDay, focusedDay) {
-            setState(() {
-              _selectedDay = selectedDay;
-              _focusedDay = focusedDay;
-            });
-          },
-          eventLoader: _getEventsForDay,
-          calendarStyle: CalendarStyle(
-            markersMaxCount: 3,
-            markerDecoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              shape: BoxShape.circle,
+    return ResponsiveContainer(
+      child: Column(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: TableCalendar(
+              firstDay: DateTime.now().subtract(const Duration(days: 365)),
+              lastDay: DateTime.now().add(const Duration(days: 365)),
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+              },
+              eventLoader: _getEventsForDay,
+              calendarStyle: CalendarStyle(
+                markersMaxCount: 3,
+                markerDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+              ),
             ),
           ),
-          headerStyle: const HeaderStyle(
-            formatButtonVisible: false,
+          const SizedBox(height: 16),
+          Expanded(
+            child: _buildEventList(),
           ),
-        ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: _buildEventList(),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -179,11 +186,7 @@ class _CalendarViewState extends State<CalendarView> {
         final prescription = medicationWithPrescription.prescription;
         
         // Check if medication is taken on selected day
-        final selectedDayKey = DateTime(
-          _selectedDay.year,
-          _selectedDay.month,
-          _selectedDay.day,
-        );
+        final selectedDayKey = '${_selectedDay.year}-${_selectedDay.month.toString().padLeft(2, '0')}-${_selectedDay.day.toString().padLeft(2, '0')}';
         final isTaken = medication.adherence[selectedDayKey] ?? false;
         
         return Card(
@@ -204,15 +207,17 @@ class _CalendarViewState extends State<CalendarView> {
             onTap: () {
               // Only allow toggling for today or past dates
               if (_selectedDay.isBefore(DateTime.now().add(const Duration(days: 1)))) {
+                final doseId = DateTime.now().millisecondsSinceEpoch.toString();
                 _databaseService.updateMedicationAdherence(
                   prescription.id,
                   medication.id,
-                  selectedDayKey,
+                  doseId,
                   !isTaken,
                 );
                 
                 // Update UI immediately
                 setState(() {
+                  // Update the adherence map with the new value
                   medication.adherence[selectedDayKey] = !isTaken;
                 });
               } else {
